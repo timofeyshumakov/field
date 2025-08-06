@@ -16,7 +16,7 @@
             <v-list-item-content>
               <v-list-item-title class="text-h6 font-weight-bold primary--text">
                 <a class="name" target="_blank" :href="'https://' + domain + '/crm/contact/details/' + contact.ID + '/'">{{ contact.FULL_NAME }}</a>
-                <v-btn icon color="error" @click="deleteCard(index)" aria-label="Delete card"><v-icon>mdi-close</v-icon></v-btn>
+                <v-btn class="delete" icon color="error" @click="deleteCard(contact.ID)" aria-label="Delete card"><v-icon>mdi-close</v-icon></v-btn>
               </v-list-item-title>
               <v-list-item-subtitle class="text-subtitle-1">
                 {{ contact.POST }}
@@ -87,6 +87,7 @@
             <v-list-item-content>
               <v-list-item-title class="text-h6 font-weight-bold primary--text">
                 <a class="name" target="_blank" :href="'https://' + domain + '/crm/contact/details/' + contact.ID + '/'">{{ contact.FULL_NAME }}</a>
+                <v-btn class="delete" icon color="error" @click="deleteCard(contact.ID)" aria-label="Delete card"><v-icon>mdi-close</v-icon></v-btn>
               </v-list-item-title>
               <v-list-item-subtitle class="text-subtitle-1">
                 {{ contact.POST }}
@@ -134,24 +135,25 @@ export default {
     const loading = ref(false);
     const error = ref(null);
     const contacts = ref([]);
+    const contactsIds = ref([]);
     const domain = ref('');
     const audienceTitles = ref(new Map());
     const cityTitles = ref(new Map());
     const products = ref([]);
     const equipment = ref([]);
+    const companyId = ref(0);
 
     const fetchCompanyData = async () => {
       domain.value = BX24.getDomain();
-      let id = 0;
       try {
-        if (BX24.placement.info().options.ENTITY_VALUE_ID === "CRM_DEAL") {
-          id = await callApi("crm.deal.list", { ID: BX24.placement.info().options.ENTITY_VALUE_ID }, ["UF_CRM_1754290331"]);
-          id = id[0].UF_CRM_1754290331;
-          return id;
-        } else {
-          id = 9722;
+        if (BX24.placement.info().options.ENTITY_ID === "CRM_DEAL") {
+          const deal = await callApi("crm.deal.list", { ID: BX24.placement.info().options.ENTITY_VALUE_ID }, ["UF_CRM_1754290331"]);
+          companyId.value = deal[0].UF_CRM_1754290331;
+        } else if(BX24.placement.info().options.ENTITY_ID === "CRM_COMPANY") {
+          companyId.value = BX24.placement.info().options.ENTITY_VALUE_ID;
+        }
           const contacts = await new Promise((resolve, reject) => {
-            BX24.callMethod("crm.company.contact.items.get", { id },
+            BX24.callMethod("crm.company.contact.items.get", { id: companyId.value },
               (response) => {
                 if (response.error()) {
                   reject(response.error());
@@ -162,7 +164,7 @@ export default {
             );
           });
           const company = await new Promise((resolve, reject) => {
-            BX24.callMethod("crm.company.get", { id },
+            BX24.callMethod("crm.company.get", { id: companyId.value },
               (response) => {
                 if (response.error()) {
                   reject(response.error());
@@ -173,16 +175,22 @@ export default {
             );
           });
           return [contacts, company.UF_CRM_1745407296, company.UF_CRM_1753257731];
-        }
       } catch (err) {
         console.error('Ошибка:', err);
         error.value = err.message;
         throw err;
       }
     };
-
-    const deleteCard = () => {
-      console.log();
+    
+    const deleteCard = (id) => {
+            BX24.callMethod("crm.contact.company.delete", {id: id, fields: { COMPANY_ID: companyId.value}},
+            (result) => {
+                if(result.error()){
+                  console.error(result.error())
+                }else{
+                  contacts.value = contacts.value.filter(item => item.ID != id);
+                }
+            });
     }
 
     const fetchData = async () => {
@@ -241,7 +249,7 @@ export default {
         });
 
         contacts.value = userData;
-
+        contactsIds.value = userData.map((item) => item.ID);
       } catch (err) {
         error.value = err.message || 'Ошибка загрузки данных';
         console.error('Ошибка:', err);
@@ -411,5 +419,12 @@ span {
 .v-list-item-subtitle span {
     font-size: 1em
 }
+
+.delete{
+  transform: scale(0.5);
+  position: relative;
+  left: -0.5rem;
+}
+
 
 </style>
