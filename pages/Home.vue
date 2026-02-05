@@ -3,16 +3,6 @@
   <div v-else>
     <!-- Компонент загрузчика -->
     <LoadingSpinner :visible="detachLoading" :text="detachLoadingText" />
-    <div class="pa-4 text-center">
-        <v-btn 
-            color="primary" 
-            @click="openCreateDialog"
-            :disabled="detachLoading"
-            prepend-icon="mdi-plus"
-        >
-            Добавить контакт
-        </v-btn>
-    </div>
     <!-- Диалог редактирования контакта -->
     <v-dialog v-model="editDialog" max-width="600px" persistent>
       <v-card>
@@ -258,11 +248,11 @@
                   title="Открепить контакт"
                   size="x-small"
                 >
-                  <v-icon>mdi-close-circle</v-icon>
+                  ❌
                 </v-btn>
                 
                 <v-btn 
-                  v-if="enityId === 'CRM_DEAL'" 
+                  v-if="enityId === 'CRM_DEAL_DETAIL_TAB'" 
                   class="key-person-btn mr-2" 
                   :color="isKeyPerson(contact.ID) ? 'success' : 'grey-lighten-2'" 
                   icon 
@@ -375,7 +365,7 @@
                 </v-btn>
                 
                 <v-btn 
-                  v-if="enityId === 'CRM_DEAL'" 
+                  v-if="enityId === 'CRM_DEAL_DETAIL_TAB'" 
                   class="key-person-btn mr-2" 
                   :color="isKeyPerson(contact.ID) ? 'success' : 'grey-lighten-2'" 
                   icon 
@@ -468,6 +458,16 @@
       </v-list-item-subtitle>
     </v-card>
   </div>
+      <div class="pa-4 text-center">
+        <v-btn 
+            color="primary" 
+            @click="openCreateDialog"
+            :disabled="detachLoading"
+            prepend-icon="mdi-plus"
+        >
+            Добавить контакт
+        </v-btn>
+    </div>
 </template>
 
 <script>
@@ -767,7 +767,7 @@ export default {
 
     const fetchKeyPersons = async () => {
       try {
-        if (enityId.value === 'CRM_DEAL') {
+        if (enityId.value === 'CRM_DEAL_DETAIL_TAB') {
           const deal = await callApi("crm.deal.list", { 
             ID: dealId.value 
           }, ["UF_CRM_1756807710"]);
@@ -783,12 +783,13 @@ export default {
 
     const fetchCompanyData = async () => {
       domain.value = BX24.getDomain();
-      enityId.value = BX24.placement.info().options.ENTITY_ID ?? 'CRM_COMPANY';
+      enityId.value = BX24.placement.info().placement ?? 'CRM_COMPANY_DETAIL_TAB';
+      console.log(enityId.value);
       let contactsList = "";
 
       try {
-        if (enityId.value === "CRM_DEAL") {
-          const deal = await callApi("crm.deal.list", { ID: BX24.placement.info().options.ENTITY_VALUE_ID}, ["COMPANY_ID", "UF_CRM_1754290331", "UF_CRM_1753365812", "UF_CRM_1758377551"]);
+        if (enityId.value === "CRM_DEAL_DETAIL_TAB") {
+          const deal = await callApi("crm.deal.list", { ID: BX24.placement.info().options.ID}, ["COMPANY_ID", "UF_CRM_1754290331", "UF_CRM_1753365812", "UF_CRM_1758377551"]);
           dealId.value = deal[0].ID;
           companyId.value = deal[0].COMPANY_ID;
           contactsList = deal[0].UF_CRM_1754290331;
@@ -803,8 +804,9 @@ export default {
           }
 
           dealAudience.value = deal[0].UF_CRM_1753365812 || [];
-        } else if(enityId.value === "CRM_COMPANY") {
-          companyId.value = BX24.placement.info().options.ENTITY_VALUE_ID ?? 13660;
+        } else if(enityId.value === "CRM_COMPANY_DETAIL_TAB") {
+          console.log(BX24.placement.info());
+          companyId.value = BX24.placement.info().options.ID ?? 13660;
           contactsList = await new Promise((resolve, reject) => {
             BX24.callMethod("crm.company.contact.items.get", { id: companyId.value },
               (response) => {
@@ -897,7 +899,7 @@ export default {
         return false;
       }
 
-      const targetAudiences = enityId.value === 'CRM_DEAL' ? 
+      const targetAudiences = enityId.value === 'CRM_DEAL_DETAIL_TAB' ? 
         dealAudience.value.map(id => String(id)) : 
         (companyTargetAudience.value.get(String(companyId.value)) || []);
       
@@ -911,7 +913,7 @@ export default {
     };
 
     const contactsWithoutAudience = computed(() => {
-      if (enityId.value === 'CRM_COMPANY') {
+      if (enityId.value === 'CRM_COMPANY_DETAIL_TAB') {
         return contacts.value.filter(contact => 
           !contact.UF_CRM_1753364801 || 
           contact.UF_CRM_1753364801.length === 0
@@ -933,7 +935,7 @@ export default {
     const audiencesWithoutContacts = computed(() => {
       const result = {};
       
-      if (enityId.value === 'CRM_COMPANY') {
+      if (enityId.value === 'CRM_COMPANY_DETAIL_TAB') {
         const allAudiences = new Set();
         
         products.value.forEach(product => {
@@ -1020,11 +1022,11 @@ export default {
 
     const filteredAudienceEquipment = computed(() => {
       const equipByAudience = {};
-      const targetAudiences = enityId.value === 'CRM_DEAL' ? 
+      const targetAudiences = enityId.value === 'CRM_DEAL_DETAIL_TAB' ? 
         dealAudience.value.map(id => String(id)) : 
         (companyTargetAudience.value.get(String(companyId.value)) || []);
       
-      const showAll = enityId.value === 'CRM_COMPANY' || targetAudiences.length === 0;
+      const showAll = enityId.value === 'CRM_COMPANY_DETAIL_TAB' || targetAudiences.length === 0;
       
       equipment.value.forEach(equip => {
         let audiences = Array.isArray(equip.ufCrm62_1753365319) ? 
@@ -1053,7 +1055,7 @@ export default {
     const filteredGroupedByAudience = computed(() => {
       const groups = new Map();
       
-      const showAllForCompany = enityId.value === 'CRM_COMPANY';
+      const showAllForCompany = enityId.value === 'CRM_COMPANY_DETAIL_TAB';
       
       contacts.value
         .filter(contact => showAllForCompany || isContactInTargetAudience(contact))
@@ -1069,7 +1071,7 @@ export default {
               return;
             }
             
-            const targetAudiencesForThis = enityId.value === 'CRM_DEAL' ? 
+            const targetAudiencesForThis = enityId.value === 'CRM_DEAL_DETAIL_TAB' ? 
               dealAudience.value.map(id => String(id)) :
               (contact.UF_CRM_1756633452 ? 
                 parseCompanyTargetAudience(contact.UF_CRM_1756633452).get(String(companyId.value)) || [] :
@@ -1090,11 +1092,11 @@ export default {
 
     const filteredAudienceMedications = computed(() => {
       const medsByAudience = {};
-      const targetAudiences = enityId.value === 'CRM_DEAL' ? 
+      const targetAudiences = enityId.value === 'CRM_DEAL_DETAIL_TAB' ? 
         dealAudience.value.map(id => String(id)) : 
         (companyTargetAudience.value.get(String(companyId.value)) || []);
       
-      const showAll = enityId.value === 'CRM_COMPANY' || targetAudiences.length === 0;
+      const showAll = enityId.value === 'CRM_COMPANY_DETAIL_TAB' || targetAudiences.length === 0;
       
       products.value.forEach(product => {
         let audiences = Array.isArray(product.ufCrm26_1753365041) ? 
@@ -1411,7 +1413,7 @@ a {
 }
 
 .name {
-    font-size: .7em!important;
+    font-size: 1em!important;
     font-weight: 400
 }
 
@@ -1438,7 +1440,8 @@ span {
     padding-inline:.5rem}
 
 .v-list .v-list-item--density-default:not(.v-list-item--nav).v-list-item--one-line {
-    padding-inline:0;padding: 0 .5rem
+    padding-inline:0;
+    padding: .5rem;
 }
 
 .v-card-title {
