@@ -3,13 +3,48 @@
   <div v-else>
     <!-- Компонент загрузчика -->
     <LoadingSpinner :visible="detachLoading" :text="detachLoadingText" />
+    <!-- Верхний блок с фильтром и кнопкой -->
+    <v-card class="mb-4 elevation-1">
+      <v-card-text class="pa-4">
+        <div class="d-flex align-center justify-space-between">
+          <!-- Фильтр по целевой аудитории -->
+          <v-select
+            v-model="selectedAudienceFilter"
+            :items="audienceFilterOptions"
+            item-text="title"
+            item-value="id"
+            label="Фильтр по целевой аудитории"
+            variant="outlined"
+            dense
+            clearable
+            class="mr-4"
+            style="max-width: 400px;"
+            @update:modelValue="scrollToAudience"
+          >
+            <template v-slot:item="{ props, item }">
+              <v-list-item
+                v-bind="props"
+                :title="item.raw.title"
+              ></v-list-item>
+            </template>
+          </v-select>
+          
+          <!-- Кнопка добавления контакта -->
+          <v-btn 
+            color="primary" 
+            @click="openCreateDialog"
+            :disabled="detachLoading"
+            prepend-icon="mdi-plus"
+            class="ml-auto"
+          >
+            Добавить контакт
+          </v-btn>
+        </div>
+      </v-card-text>
+    </v-card>
     <!-- Диалог редактирования контакта -->
     <v-dialog v-model="editDialog" max-width="600px" persistent>
       <v-card>
-        <v-card-title class="text-h5 primary white--text">
-          Редактирование контакта
-        </v-card-title>
-        
         <v-card-text class="pa-4">
           <v-row>
             <v-col cols="12">
@@ -108,10 +143,6 @@
     <!-- Диалог создания контакта -->
 <v-dialog v-model="createDialog" max-width="600px" persistent>
     <v-card>
-        <v-card-title class="text-h5 primary white--text">
-            Создание нового контакта
-        </v-card-title>
-        
         <v-card-text class="pa-4">
             <!-- Сообщения о дубликатах -->
             <v-alert
@@ -120,9 +151,18 @@
                 density="compact"
                 class="mb-4"
             >
-                <div v-for="(message, index) in duplicateMessages" :key="index">
-                    {{ message }}
-                </div>
+                <div v-for="(message, index) in duplicateMessages" :key="index" class="mb-1">
+                  {{ message.message }}
+                  <a 
+                      v-if="message.contactId" 
+                      :href="'https://' + domain + '/crm/contact/details/' + message.contactId + '/'"
+                      target="_blank"
+                      class="ml-1 text-decoration-underline white"
+                      @click.stop
+                  >
+                      {{message.contactName}}
+                  </a>
+              </div>
             </v-alert>
             
             <v-row>
@@ -227,6 +267,7 @@
       class="mb-3 elevation-1"
       v-for="(audience, audienceName) in filteredGroupedByAudience"
       :key="audienceName"
+      :id="'audience-' + audienceName.replace(/\s+/g, '-')"
     >
       <v-card-title class="secondary white--text">
         {{ audienceTitles.get(audienceName) || audienceName }}
@@ -340,6 +381,7 @@
     <v-card 
       class="mb-3 elevation-1"
       v-if="contactsWithoutAudience.length > 0"
+      id="no-audience-block"
     >
       <v-card-title class="secondary white--text">
         Другие
@@ -458,20 +500,10 @@
       </v-list-item-subtitle>
     </v-card>
   </div>
-      <div class="pa-4 text-center">
-        <v-btn 
-            color="primary" 
-            @click="openCreateDialog"
-            :disabled="detachLoading"
-            prepend-icon="mdi-plus"
-        >
-            Добавить контакт
-        </v-btn>
-    </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, reactive } from 'vue';
+import { ref, computed, onMounted, reactive, nextTick } from 'vue';
 import { callApi, getListElements, detachContacts } from "../functions/callApi";
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 
@@ -500,6 +532,112 @@ export default {
     const dealAudience = ref([]);
     const companyTargetAudience = ref(new Map());
     const keyPersons = ref([]);
+const selectedAudienceFilter = ref(null);
+    const audienceFilterOptions = computed(() => {
+  // Сначала собираем все аудитории, затем добавляем "Другие" при необходимости
+  const options = [];
+  
+  // Собираем все целевые аудитории из contacts
+  const allAudienceIds = new Set();
+  
+  contacts.value.forEach(contact => {
+    if (contact.UF_CRM_1753364801 && contact.UF_CRM_1753364801.length > 0) {
+      contact.UF_CRM_1753364801.forEach(audienceId => {
+        const audienceTitle = audienceTitles.value.get(String(audienceId)) || String(audienceId);
+        if (audienceTitle && audienceTitle.trim() !== '' && !allAudienceIds.has(String(audienceId))) {
+          allAudienceIds.add(String(audienceId));
+          options.push({
+            id: String(audienceId),
+            title: audienceTitle
+          });
+        }
+      });
+    }
+  });
+  
+  // Добавляем аудитории из audiencesWithoutContacts
+  Object.keys(audiencesWithoutContacts.value).forEach(audienceTitle => {
+    const audienceId = Array.from(audienceTitles.value.entries())
+      .find(([id, title]) => title === audienceTitle)?.[0];
+    
+    if (audienceId && !allAudienceIds.has(audienceId)) {
+      allAudienceIds.add(audienceId);
+      options.push({
+        id: audienceId,
+        title: audienceTitle
+      });
+    }
+  });
+  
+  // Добавляем "Другие" только если есть контакты без целевой аудитории
+  if (contactsWithoutAudience.value.length > 0) {
+    options.push({ 
+      id: 'no-audience', 
+      title: 'Другие' 
+    });
+  }
+  
+  return options.sort((a, b) => a.title.localeCompare(b.title));
+});
+
+    const scrollToAudience = async (audienceId) => {
+      if (!audienceId) {
+        // Если фильтр сброшен, прокручиваем наверх
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+      
+      await nextTick();
+      
+      let elementId;
+      let element;
+      
+      if (audienceId === 'no-audience') {
+        // Прокрутка к блоку "Другие"
+        elementId = 'no-audience-block';
+        element = document.getElementById(elementId);
+        
+        if (!element) {
+          // Создаем временный id для блока "Другие"
+          const otherBlocks = document.querySelectorAll('.v-card-title');
+          otherBlocks.forEach(block => {
+            if (block.textContent.trim() === 'Другие') {
+              element = block.closest('.v-card');
+            }
+          });
+        }
+      } else {
+        // Прокрутка к конкретной целевой аудитории
+        const audienceTitle = audienceTitles.value.get(String(audienceId)) || audienceId;
+        elementId = `audience-${audienceTitle.replace(/\s+/g, '-')}`;
+        element = document.getElementById(elementId);
+        
+        if (!element) {
+          // Ищем элемент по заголовку
+          const allBlocks = document.querySelectorAll('.v-card-title');
+          allBlocks.forEach(block => {
+            if (block.textContent.trim() === audienceTitle) {
+              element = block.closest('.v-card');
+            }
+          });
+        }
+      }
+      
+      if (element) {
+        element.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start' 
+        });
+        
+        // Добавляем подсветку
+        element.style.transition = 'all 0.3s ease';
+        element.style.boxShadow = '0 0 0 3px rgba(25, 118, 210, 0.3)';
+        
+        setTimeout(() => {
+          element.style.boxShadow = '';
+        }, 1500);
+      }
+    };
 
     // Данные для редактирования контакта
     const editContactData = reactive({
@@ -784,6 +922,7 @@ export default {
     const fetchCompanyData = async () => {
       domain.value = BX24.getDomain();
       enityId.value = BX24.placement.info().placement ?? 'CRM_COMPANY_DETAIL_TAB';
+      enityId.value = enityId.value === 'DEFAULT' ? 'CRM_COMPANY_DETAIL_TAB' : enityId.value;
       console.log(enityId.value);
       let contactsList = "";
 
@@ -1155,9 +1294,28 @@ const openCreateDialog = () => {
 const checkDuplicates = () => {
     duplicateMessages.value = [];
     
+    const fullName = newContactData.FULL_NAME?.trim().toLowerCase();
     const email = newContactData.emailValue?.trim().toLowerCase();
     const phone = newContactData.phoneValue?.trim();
-    
+    if (fullName) {
+        // Ищем контакты с похожим ФИО
+        const nameDuplicates = contacts.value.filter(contact => {
+            const contactFullName = contact.FULL_NAME?.toLowerCase();
+            return contactFullName && 
+                   (contactFullName === fullName || 
+                    contactFullName.includes(fullName) || 
+                    fullName.includes(contactFullName));
+        });
+        
+        nameDuplicates.forEach(duplicate => {
+            duplicateMessages.value.push({
+                type: 'fio',
+                message: `Контакт с похожим ФИО уже существует: `,
+                contactId: duplicate.ID,
+                contactName: duplicate.FULL_NAME
+            });
+        });
+    }
     // Проверка email
     if (email) {
         const emailDuplicate = contacts.value.find(contact => 
@@ -1167,7 +1325,12 @@ const checkDuplicates = () => {
         );
         
         if (emailDuplicate) {
-            duplicateMessages.value.push(`Email уже используется контактом: ${emailDuplicate.FULL_NAME}`);
+            duplicateMessages.value.push({
+                type: 'email',
+                message: `Email уже используется контактом: `,
+                contactId: emailDuplicate.ID,
+                contactName: emailDuplicate.FULL_NAME
+            });
         }
     }
     
@@ -1180,7 +1343,12 @@ const checkDuplicates = () => {
         );
         
         if (phoneDuplicate) {
-            duplicateMessages.value.push(`Телефон уже используется контактом: ${phoneDuplicate.FULL_NAME}`);
+            duplicateMessages.value.push({
+                type: 'phone',
+                message: `Телефон уже используется контактом: `,
+                contactId: phoneDuplicate.ID,
+                contactName: phoneDuplicate.FULL_NAME
+            });
         }
     }
     
@@ -1386,7 +1554,10 @@ const cancelCreate = () => {
       openCreateDialog,
       createContact,
       cancelCreate,
-      checkDuplicates
+      checkDuplicates,
+      selectedAudienceFilter,
+      audienceFilterOptions,
+      scrollToAudience,
     };
   }
 }
@@ -1395,7 +1566,7 @@ const cancelCreate = () => {
 <style>
 /* Существующие стили */
 #app {
-    font-size: 1.1rem;
+    font-size: 0.9rem;
     padding-bottom: .2rem
 }
 
@@ -1544,5 +1715,9 @@ span {
 .v-dialog .v-btn {
   text-transform: none !important;
   letter-spacing: normal !important;
+}
+
+.white{
+  color: white;
 }
 </style>
