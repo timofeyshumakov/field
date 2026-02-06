@@ -1424,21 +1424,19 @@ const createContact = async () => {
                 }
             });
         });
-        
-        // 2. Привязываем контакт к компании
+
         await new Promise((resolve, reject) => {
-            BX24.callMethod('crm.company.contact.items.add', {
-                'id': companyId.value,
-                'items': [{ 'CONTACT_ID': createdContact }]
-            }, (response) => {
-                if (response.error()) {
-                    reject(response.error());
-                } else {
-                    resolve(response.data());
-                }
-            });
+          BX24.callMethod('crm.company.contact.add', {
+            'ID': companyId.value,
+            'FIELDS': { 'CONTACT_ID': createdContact }
+          }, (response) => {
+            if (response.error()) {
+              reject(response.error());
+            } else {
+              resolve(response.data());
+            }
+          });
         });
-        
         // 3. Загружаем созданный контакт для отображения
         const loadedContact = await callApi(
             "crm.contact.list", 
