@@ -1427,6 +1427,18 @@ const createContact = async () => {
             }
           });
         });
+
+        BX24.callMethod(	
+          'bizproc.workflow.start',
+          {
+              TEMPLATE_ID: 3246,
+              DOCUMENT_ID: [
+                  'crm',
+                  'CCrmDocumentCompany',
+                  'COMPANY_' + companyId.value
+              ],
+          }
+        );
         // 3. Загружаем созданный контакт для отображения
         const loadedContact = await callApi(
             "crm.contact.list", 
