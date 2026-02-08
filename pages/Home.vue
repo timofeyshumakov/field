@@ -1052,19 +1052,6 @@ const selectedAudienceFilter = ref(null);
     };
 
     const contactsWithoutAudience = computed(() => {
-      if (enityId.value === 'CRM_COMPANY_DETAIL_TAB') {
-        return contacts.value.filter(contact => 
-          !contact.UF_CRM_1753364801 || 
-          contact.UF_CRM_1753364801.length === 0
-        );
-      }
-      
-      const targetAudiences = dealAudience.value.map(id => String(id));
-      
-      if (targetAudiences.length === 0) {
-        return [];
-      }
-      
       return contacts.value.filter(contact => 
         !contact.UF_CRM_1753364801 || 
         contact.UF_CRM_1753364801.length === 0
@@ -1192,42 +1179,45 @@ const selectedAudienceFilter = ref(null);
     });
 
     const filteredGroupedByAudience = computed(() => {
-      const groups = new Map();
+  const groups = new Map();
+  
+  const showAllForCompany = enityId.value === 'CRM_COMPANY_DETAIL_TAB';
+  
+  contacts.value
+    .filter(contact => {
+      // Исключаем контакты без целевых аудиторий
+      if (!contact.UF_CRM_1753364801 || contact.UF_CRM_1753364801.length === 0) {
+        return false;
+      }
       
-      const showAllForCompany = enityId.value === 'CRM_COMPANY_DETAIL_TAB';
-      
-      contacts.value
-        .filter(contact => showAllForCompany || isContactInTargetAudience(contact))
-        .forEach(contact => {
-          if (!contact.UF_CRM_1753364801 || contact.UF_CRM_1753364801.length === 0) {
-            return;
+      return showAllForCompany || isContactInTargetAudience(contact);
+    })
+    .forEach(contact => {
+      contact.UF_CRM_1753364801.forEach(audienceId => {
+        const audienceTitle = audienceTitles.value.get(String(audienceId)) || String(audienceId);
+        
+        if (!audienceTitle || audienceTitle.trim() === '') {
+          return;
+        }
+        
+        const targetAudiencesForThis = enityId.value === 'CRM_DEAL_DETAIL_TAB' ? 
+          dealAudience.value.map(id => String(id)) :
+          (contact.UF_CRM_1756633452 ? 
+            parseCompanyTargetAudience(contact.UF_CRM_1756633452).get(String(companyId.value)) || [] :
+            companyTargetAudience.value.get(String(companyId.value)) || []);
+        
+        if (showAllForCompany || targetAudiencesForThis.length === 0 || targetAudiencesForThis.includes(String(audienceId))) {
+          if (!groups.has(audienceTitle)) {
+            groups.set(audienceTitle, []);
           }
-          
-          contact.UF_CRM_1753364801.forEach(audienceId => {
-            const audienceTitle = audienceTitles.value.get(String(audienceId)) || String(audienceId);
-            
-            if (!audienceTitle || audienceTitle.trim() === '') {
-              return;
-            }
-            
-            const targetAudiencesForThis = enityId.value === 'CRM_DEAL_DETAIL_TAB' ? 
-              dealAudience.value.map(id => String(id)) :
-              (contact.UF_CRM_1756633452 ? 
-                parseCompanyTargetAudience(contact.UF_CRM_1756633452).get(String(companyId.value)) || [] :
-                companyTargetAudience.value.get(String(companyId.value)) || []);
-            
-            if (showAllForCompany || targetAudiencesForThis.length === 0 || targetAudiencesForThis.includes(String(audienceId))) {
-              if (!groups.has(audienceTitle)) {
-                groups.set(audienceTitle, []);
-              }
-              if (!groups.get(audienceTitle).some(c => c.ID === contact.ID)) {
-                groups.get(audienceTitle).push(contact);
-              }
-            }
-          });
-        });
-      return Object.fromEntries(groups);
+          if (!groups.get(audienceTitle).some(c => c.ID === contact.ID)) {
+            groups.get(audienceTitle).push(contact);
+          }
+        }
+      });
     });
+  return Object.fromEntries(groups);
+});
 
     const filteredAudienceMedications = computed(() => {
       const medsByAudience = {};
